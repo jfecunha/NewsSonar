@@ -1,4 +1,6 @@
-FROM ubuntu:18.04
+#FROM ubuntu:18.04
+FROM python:3.10-buster
+
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV SERVICE_HOME="/tesseract"
@@ -6,7 +8,7 @@ ENV PYTHONIOENCODING=utf8
 
 WORKDIR ${SERVICE_HOME}
 
-COPY data/crop/cmjornal/cmjornal-20200901070349.png ${SERVICE_HOME}
+COPY data/crop/ ${SERVICE_HOME}/data/crop/
 COPY scripts/apply_tesseract.py ${SERVICE_HOME}
 
 RUN apt-get update \
@@ -17,12 +19,10 @@ RUN apt-get update \
   && pip3 --no-cache-dir install --upgrade pip \
   && rm -rf /var/lib/apt/lists/*
 
-# RUN apt update \
-#   && apt-get install ffmpeg libsm6 libxext6 -y
-#RUN pip3 install pytesseract
-#RUN pip3 install opencv-python-headless
-#RUN pip3 install pillow
 
-RUN pip install pillow pytesseract
+RUN apt update \
+  && apt-get install ffmpeg libsm6 libxext6 -y
+
+RUN pip install pillow pytesseract joblib opencv-python
 
 ENTRYPOINT ["python3", "apply_tesseract.py"]

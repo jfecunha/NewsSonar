@@ -4,7 +4,7 @@
 ## Docker
 
 ```sh
-docker build --rm --tag tesserarct -f .\docker\tesseract\Dockerfile .
+docker build --rm --tag tesseract -f .\docker\tesseract\Dockerfile .
 ```
 
 ## Fine tuning LayoutLM on arquivo dataset
@@ -14,5 +14,9 @@ https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/
 ## Docker copy
 
 ```sh
-    docker cp test-tesesract:/tesseract/data .
+    docker cp ocr_tessesract:/tesseract/data/ocr ./data/ocr
 ```
+
+## Tesseract directory for Windows
+
+C:\Program Files\Tesseract-OCR
