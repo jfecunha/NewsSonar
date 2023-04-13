@@ -57,4 +57,4 @@ if __name__ == "__main__":
     print(len(image_paths))
 
     with parallel_backend('threading', n_jobs=-1):
-        Parallel(n_jobs=-1)(delayed(apply_ocr_on_file)(file) for file in image_paths[0:2])
+        Parallel(n_jobs=-1)(delayed(apply_ocr_on_file)(file) for file in image_paths)

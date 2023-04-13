@@ -22,7 +22,7 @@ pytesseract = "^0.3.10"
 [tool.poetry.dev-dependencies]
 flake8 = "^3.9.2"
 mypy = "^0.902"
-
+black = "^23.3.0"
 
 [build-system]
 requires = ["poetry-core"]
