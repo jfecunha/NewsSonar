@@ -3,25 +3,38 @@ import json
 import glob
 import re
 import io
+import sys
+import logging
 
 from pathlib import Path
+
+parent = Path().absolute().as_posix()
+sys.path.insert(0, parent)
+
 from typing import Dict, List
 from copy import deepcopy
-from PIL import Image
+from PIL import Image, ImageEnhance
 
 import pandas as pd
 import numpy as np
+import cv2
+import pytesseract
 
 from joblib import Parallel, delayed
 from joblib import parallel_backend
 from sklearn.model_selection import train_test_split
+from datasets import load_dataset
+
+from utils import DataExtractor
+
+pytesseract.pytesseract.tesseract_cmd = r'C:/Program Files/Tesseract-OCR/tesseract'
 
 
-class AnnotationsProcessor:
-    def __init__(self, overlap_ratio=0.3) -> None:
+class DatasetBuilder:
+    def __init__(self, overlap_ratio=0.3, train=True) -> None:
         self.overlap_ratio = overlap_ratio
         self.annotation_max_range = 100
-
+        self.train = train
         self.label2id = {
             'None': 0,
             'Title': 1,
@@ -33,21 +46,17 @@ class AnnotationsProcessor:
         if annotation["annotations"][0]["result"]:
             try:
                 annotation_scaled = self._process_annotation(annotation)
-            except IndexError:
+                file_stem = re.findall(r"-(.*)", Path(annotation["file_upload"]).stem)[0]
+                newspaper = file_stem.split("-")[0]
+                img_file_path = Path("data", "crop", newspaper, f"{file_stem}.png")
+                img = cv2.imread(img_file_path.as_posix())
+                file_ocr_data = self.run_ocr(img)
+                annotation_processed = self._get_text_from_ocr_df(annotation_scaled, file_ocr_data)
+                self._save_processed_annotation(file_stem, annotation_processed)
+            except Exception as e:
+                print(e)
                 return None
-            ocr_data, file_name = self._load_ocr_data(annotation["file_upload"])
-            annotation_processed = self._get_text_from_ocr_df(
-                annotation_scaled, ocr_data
-            )
-            self._save_processed_annotation(file_name, annotation_processed)
 
-    @staticmethod
-    def _load_ocr_data(annotation_file_path):
-        file_stem = re.findall(r"-(.*)", Path(annotation_file_path).stem)[0]
-        ocr_file_path = Path("data", "ocr", f"{file_stem}.json")
-        file = open(ocr_file_path)
-        ocr_data = json.load(file)
-        return ocr_data, file_stem
 
     @staticmethod
     def _save_processed_annotation(file_name, annot_data):
@@ -82,9 +91,7 @@ class AnnotationsProcessor:
 
     def _get_text_from_ocr_df(self, annotation: Dict, ocr: Dict) -> List[Dict]:
         """Add text to annotation."""
-        ocr_df = pd.DataFrame(ocr)
-        ocr_df["right"] = ocr_df["left"] + ocr_df["width"]
-        ocr_df["bottom"] = ocr_df["top"] + ocr_df["height"]
+        ocr_df = pd.DataFrame(DataExtractor.flat_list([val["words"] for val in ocr]))
 
         # Remove broken words like None
         ocr_df = ocr_df.dropna()
@@ -166,16 +173,87 @@ class AnnotationsProcessor:
             int(1000 * (bbox[3] / height)),
         ]
 
+    @staticmethod
+    def process_image(img):
+        gray = cv2.cvtColor(img.copy(), cv2.COLOR_BGR2GRAY)
+        # inverse binary image, to ensure text region is in white
+        # because contours are found for objects in white
+        th = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
+        kernel_length = 10
+        horizontal_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kernel_length, 1))
+        dilate = cv2.dilate(th, horizontal_kernel, iterations=1)
+        return dilate
+
+    def run_ocr(self, raw_img):
+        processed_img = self.process_image(raw_img)
+        contours = cv2.findContours(processed_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        contours = contours[0] if len(contours) == 2 else contours[1]
+        custom_config = r'--oem 3 --psm 7'
+        file_ocr = []
+
+        for c in contours:
+            x, y, w, h = cv2.boundingRect(c)
+            area = w*h
+            # filter noise
+            if area <= 15000 and area > 200:
+
+                crop_margin = 3
+                croping_shape = (x-crop_margin, y-crop_margin, (x+w) + crop_margin, (y+h) + crop_margin)
+                raw_img_pil = Image.fromarray(np.uint8(raw_img))
+                croped_img = raw_img_pil.crop(croping_shape)
+
+                # Increase contrast and convert to grayscale
+                croped_img_proc = ImageEnhance.Contrast(croped_img)
+                croped_img_proc = croped_img_proc.enhance(1.5).convert('L')
+
+                ocr_result = pytesseract.image_to_data(
+                    croped_img_proc,
+                    output_type=pytesseract.Output.DICT,
+                    config=custom_config)
+
+                temp = dict()
+                temp['text'] = ' '.join(ocr_result["text"])
+                temp['left'] = x
+                temp['top'] = y
+                temp['right'] = x+w
+                temp['bottom'] = y+h
+                temp['width'] = w
+                temp['height'] = h
+
+                if self.train:
+                    subwords = []
+                    for _, ocr_meta in enumerate(zip(ocr_result["left"], ocr_result["width"], ocr_result["text"], ocr_result["conf"])):
+                        # Discard confidences like -1
+                        if ocr_meta[3] != -1:
+                            word_meta = dict()
+                            word_meta['text'] = ocr_meta[2]
+                            word_meta['left'] = x + ocr_meta[0]
+                            word_meta['top'] = y
+                            word_meta['width'] = ocr_meta[1]
+                            word_meta['height'] = h
+                            word_meta['right'] = (x + ocr_meta[0]) + ocr_meta[1]
+                            word_meta['bottom'] = y+h
+                            subwords.append(word_meta)
+                temp['words'] = subwords
+                file_ocr.append(temp)
+        return file_ocr
+
 
 if __name__ == "__main__":
+
+    logger = logging.getLogger("Data-Prep")
+    logging.basicConfig(level=logging.INFO)
+
     # Load annotations data
     file = open("./annotations/project-2-at-2023-04-06-16-59-565329e3.json")
     annotations = json.load(file)
 
-    ap = AnnotationsProcessor()
+    logger.info('Processing annotations')
+    db = DatasetBuilder()
     with parallel_backend("threading", n_jobs=-1):
-        Parallel(n_jobs=-1)(delayed(ap)(file) for file in annotations[0:])
+        Parallel(n_jobs=-1)(delayed(db)(file) for file in annotations[0:])
 
+    logger.info('Processing dataset')
     # Generate a dataframe with all the data
     aggregated_annotations = pd.DataFrame()
     for index, file in enumerate(glob.glob("./data/annotations/*")):
@@ -193,18 +271,18 @@ if __name__ == "__main__":
             img_bytes = io.BytesIO()
             image.save(img_bytes, format='PNG')
             img_data = img_bytes.getvalue()
-
-            temp_df = pd.DataFrame()
-            temp_df["id"] = [index]
-            temp_df["words"] = [list(file_df["text"].values)]
+            temp = pd.DataFrame()
+            temp["image_id"] = [index]
+            temp["words"] = [list(file_df["text"].values)]
             # Normalize to match LayoutLMv2 range (0, 1000)
-            temp_df["bboxes"] = [[ap.normalize_bbox(eval(val), 2000, 2000) for val in file_df["bboxes"]]]
-            temp_df["labels"] = [list(file_df["label"].values)]
-            temp_df["image"] = [img_data]
-            temp_df["image_path"] = [image_path]
-            temp_df["source"] = [source]
-            aggregated_annotations = pd.concat([aggregated_annotations, temp_df], axis=0)
+            temp["bboxes"] = [[db.normalize_bbox(eval(val), 2000, 2000) for val in file_df["bboxes"]]]
+            temp["labels"] = [list(file_df["label"].values)]
+            temp["image"] = [img_data]
+            temp["image_path"] = [image_path]
+            temp["source"] = [source]
+            aggregated_annotations = pd.concat([aggregated_annotations, temp], axis=0)
 
+    logger.info('Create partitions')
     # create partitions for model training
     train_df, test_df, _, __ = train_test_split(
         aggregated_annotations,
@@ -214,7 +292,18 @@ if __name__ == "__main__":
         stratify=aggregated_annotations.source,
     )
 
+    logger.info('Saving dataset locally')
     save_dir = Path("data", "processed")
     save_dir.mkdir(parents=True, exist_ok=True)
     train_df.to_parquet(Path("data", "processed", "train_data.parquet"), engine='pyarrow')
     test_df.to_parquet(Path("data", "processed", "test_data.parquet"), engine='pyarrow')
+
+    logger.info('Saving dataset to huggingface hub')
+    # TODO: try to load directly from pandas
+    dataset = load_dataset(
+        "parquet",
+        data_files={'train': 'train_data.parquet', 'test': 'test_data.parquet'},
+        data_dir='./data/processed'
+    )
+
+    dataset.push_to_hub("jfecunha/arquivo_news", token='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')

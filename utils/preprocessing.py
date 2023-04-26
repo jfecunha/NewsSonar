@@ -1,7 +1,6 @@
 import requests
 import json
 import urllib.request
-import time
 
 from datetime import datetime
 from typing import Dict, List
