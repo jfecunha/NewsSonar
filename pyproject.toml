@@ -5,6 +5,8 @@ description = ""
 authors = ["jfecunha <joao.o.cunha92@gmail.com>"]
 readme = "README.md"
 
+packages = [{ include = "scripts"}]
+
 [tool.poetry.dependencies]
 python = "3.9.*"
 
@@ -27,8 +29,6 @@ seqeval = "^1.2.2"
 sentencepiece = "^0.1.98"
 playwright = "^1.32.1"
 beautifulsoup4 = "^4.12.2"
-
-
 
 [tool.poetry.dev-dependencies]
 flake8 = "^3.9.2"
