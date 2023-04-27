@@ -5,6 +5,7 @@ import urllib.request
 from datetime import datetime
 from typing import Dict, List
 from pathlib import Path
+from PIL import Image
 
 import numpy as np
 
@@ -97,3 +98,27 @@ class DataExtractor:
         except Exception as e:
             print(e)
             return None
+
+
+def crop_image(path, shape=(2000, 2000)):
+
+    # Open the big image file
+    big_image = Image.open(path)
+    width, height = shape
+    #num_rows = big_image.height // height
+
+    # Loop through each row and column and crop the big image into small images
+    for row in range(1):
+        # Calculate the coordinates for cropping the small image
+        x0 = 0
+        y0 = row * height
+        x1 = x0 + width
+        y1 = y0 + height
+
+        # Crop the small image from the big image
+        small_image = big_image.crop((x0, y0, x1, y1))
+
+        # Save the small image with a unique filename
+        filename = path.replace("raw", "crop")
+        Path(filename).parent.mkdir(exist_ok=True)
+        small_image.save(filename)

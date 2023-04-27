@@ -1,1 +1,1 @@
-from .preprocessing import DataExtractor
+from .preprocessing import DataExtractor, crop_image
