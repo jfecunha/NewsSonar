@@ -234,7 +234,7 @@ class DatasetBuilder:
                             word_meta['right'] = (x + ocr_meta[0]) + ocr_meta[1]
                             word_meta['bottom'] = y+h
                             subwords.append(word_meta)
-                temp['words'] = subwords
+                    temp['words'] = subwords
                 file_ocr.append(temp)
         return file_ocr
 
