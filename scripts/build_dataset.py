@@ -94,10 +94,10 @@ class DatasetBuilder:
         if self.train:
             ocr_df = pd.DataFrame(DataExtractor.flat_list([val["words"] for val in ocr]))
         else:
-            ocr_df = pd.DataFrame()
+            ocr_df = pd.DataFrame(ocr)
 
         # Remove broken words like None
-        ocr_df = ocr_df.dropna(ocr)
+        ocr_df = ocr_df.dropna()
 
         words_metadata = []
         for bb in deepcopy(annotation):
