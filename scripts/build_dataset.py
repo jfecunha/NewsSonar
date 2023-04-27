@@ -91,10 +91,13 @@ class DatasetBuilder:
 
     def _get_text_from_ocr_df(self, annotation: Dict, ocr: Dict) -> List[Dict]:
         """Add text to annotation."""
-        ocr_df = pd.DataFrame(DataExtractor.flat_list([val["words"] for val in ocr]))
+        if self.train:
+            ocr_df = pd.DataFrame(DataExtractor.flat_list([val["words"] for val in ocr]))
+        else:
+            ocr_df = pd.DataFrame()
 
         # Remove broken words like None
-        ocr_df = ocr_df.dropna()
+        ocr_df = ocr_df.dropna(ocr)
 
         words_metadata = []
         for bb in deepcopy(annotation):
