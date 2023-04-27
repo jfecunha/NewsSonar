@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "newssonar"
-version = "0.2.1"
+version = "0.2.2"
 description = ""
 authors = ["jfecunha <joao.o.cunha92@gmail.com>"]
 readme = "README.md"
