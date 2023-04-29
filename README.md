@@ -7,6 +7,11 @@
 docker build --rm --tag tesseract -f .\docker\tesseract\Dockerfile .
 ```
 
+```sh
+docker build --rm --tag gradio-app -f .\docker\ui_app\Dockerfile .
+```
+
+
 ## Fine tuning LayoutLM on arquivo dataset
 
 https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/LayoutLMv2/FUNSD/Fine_tuning_LayoutLMv2ForTokenClassification_on_FUNSD_using_HuggingFace_Trainer.ipynb#scrollTo=SedlLnHKZLAc
@@ -25,3 +30,6 @@ C:\Program Files\Tesseract-OCR
 https://stackoverflow.com/questions/72528380/how-to-get-coordinates-of-the-overall-bounding-box-of-a-text-image
 
 https://colab.research.google.com/drive/1iaoI2qb2zprbORDKNo5fBAFywhAlL-ea?usp=sharing#scrollTo=d65JI0n2dR0Q
+
+
+docker run -p 7860:7860 -e GRADIO_SERVER_NAME=0.0.0.0 gradio-app

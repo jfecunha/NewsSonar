@@ -1,6 +1,7 @@
 import requests
 import json
 import urllib.request
+import io
 
 from datetime import datetime
 from typing import Dict, List
@@ -9,6 +10,7 @@ from PIL import Image
 
 import numpy as np
 
+from playwright.sync_api import sync_playwright
 
 class DataExtractor:
 
@@ -100,14 +102,13 @@ class DataExtractor:
             return None
 
 
-def crop_image(path, shape=(2000, 2000)):
-
+def crop_image_to_dir(path, shape=(2000, 2000)):
+    """ Crop image from path to target size."""
     # Open the big image file
     big_image = Image.open(path)
     width, height = shape
-    #num_rows = big_image.height // height
 
-    # Loop through each row and column and crop the big image into small images
+    # Look ust for the first page
     for row in range(1):
         # Calculate the coordinates for cropping the small image
         x0 = 0
@@ -121,4 +122,44 @@ def crop_image(path, shape=(2000, 2000)):
         # Save the small image with a unique filename
         filename = path.replace("raw", "crop")
         Path(filename).parent.mkdir(exist_ok=True)
-        small_image.save(filename)
+        small_image.save(path)
+
+
+def crop_image(img):
+    """Crop in memory image to target size."""
+    width, height = img.shape
+
+    # Look ust for the first page
+    for row in range(1):
+        # Calculate the coordinates for cropping the small image
+        x0 = 0
+        y0 = row * height
+        x1 = x0 + width
+        y1 = y0 + height
+
+        # Crop the small image from the big image
+        small_image = img.crop((x0, y0, x1, y1))
+
+    return small_image
+
+
+def process_byte_image(image_bytes):
+    """Decode byte image."""
+    with io.BytesIO(image_bytes) as f:
+        img = Image.open(f).convert("RGB")
+        return img
+
+
+def get_website_screenshot(url):
+
+    def run(playwright, url):
+        webkit = playwright.webkit
+        browser = webkit.launch()
+        context = browser.new_context()
+        page = context.new_page()
+        page.goto(url)
+        page.screenshot(path="screenshot.png")
+        browser.close()
+
+    with sync_playwright() as playwright:
+        run(playwright, url)
