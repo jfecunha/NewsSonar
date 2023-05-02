@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import pytesseract
 
-from utils.postprocessing import process_predictions, unnormalize_box
+from utils.postprocessing import process_predictions, unnormalize_box, process_text_bboxes
 from utils.preprocessing import DataExtractor
 from scripts.build_dataset import DatasetBuilder
 
@@ -59,19 +59,19 @@ def make_model_request(model, processor, img, file, id2label):
         if not is_subword[idx]
     ]
 
-    model_response = process_predictions(zip(token_boxes_processed, predictions_processed))
+    model_response = process_predictions(zip(token_boxes_processed, predictions_processed), id2label)
 
     return model_response, token_boxes_processed, predictions_processed
 
 
 def main(img):
-    img_ocr = DB_TRAIN.run_ocr(np.asarray(img))
+    img_ocr = DB_BUILDER.run_ocr(np.asarray(img))
     words = pd.DataFrame(DataExtractor.flat_list([val["words"] for val in img_ocr]))
     img_data = Dataset.from_dict(
         {
             "words": list(words["text"].values),
             "bboxes": [
-                DB_TRAIN.normalize_bbox(
+                DB_BUILDER.normalize_bbox(
                     [val["left"], val["top"], val["right"], val["bottom"]], 2000, 2000
                 )
                 for _, val in words.iterrows()
@@ -79,9 +79,14 @@ def main(img):
         }
     )
 
-    response_ocr_format, bboxes, labels = make_model_request(
+    bboxes_df, bboxes, labels = make_model_request(
         model=MODEL, processor=PROCESSOR, img=img, file=img_data, id2label=ID2LABEL
     )
+
+    # Switch to Inference mode
+    DB_BUILDER.train = False
+    predicted_text = DB_BUILDER._get_text_from_ocr_df(bboxes_df, img_ocr)
+    predicted_text = process_text_bboxes(predicted_text)
 
     img_to_draw = deepcopy(img)
     draw = ImageDraw.Draw(img_to_draw)
@@ -93,17 +98,18 @@ def main(img):
     for prediction, box in zip(labels, bboxes):
         draw.rectangle(box, outline=label2color[prediction])
 
-    return img_to_draw
+    return img, img_to_draw, predicted_text
 
 
-# Necessary inputs
-LABEL2ID = {"None": 0, "Title": 1, "SubTitle": 2, "Category": 3}
+if __name__ == "__main__":
 
-ID2LABEL = {v: k for v, k in enumerate(LABEL2ID)}
-MODEL = LayoutLMv2ForTokenClassification.from_pretrained(
-    'jfecunha/arquivo-layoutxml-model',
-    num_labels=len(LABEL2ID)
-)
-PROCESSOR = LayoutXLMProcessor.from_pretrained("microsoft/layoutxlm-base", apply_ocr=False)
-DB_TRAIN = DatasetBuilder(train=True, overlap_ratio=0.3)
-DB_INFERENCE = DatasetBuilder(train=False, overlap_ratio=0.3)
+    # Necessary inputs
+    LABEL2ID = {"None": 0, "Title": 1, "SubTitle": 2, "Category": 3}
+
+    ID2LABEL = {v: k for v, k in enumerate(LABEL2ID)}
+    MODEL = LayoutLMv2ForTokenClassification.from_pretrained(
+        'jfecunha/arquivo-layoutxml-model',
+        num_labels=len(LABEL2ID)
+    )
+    PROCESSOR = LayoutXLMProcessor.from_pretrained("microsoft/layoutxlm-base", apply_ocr=False)
+    DB_BUILDER = DatasetBuilder(train=True, overlap_ratio=0.3)

@@ -12,7 +12,11 @@ if __name__ == "__main__":
     iface = gr.Interface(
         fn=main,
         inputs=gr.Image(type="pil"),
-        outputs=gr.Image(type="pil", label="annotated image"),
+        outputs=[
+            gr.Image(type="pil", label="Raw Image"),
+            gr.Image(type="pil", label="Model Response"),
+            gr.Dataframe(label="Model Predictions Metadata")
+        ]
         css=css,
         title='NewsSonar Arquivo model.'
     )
